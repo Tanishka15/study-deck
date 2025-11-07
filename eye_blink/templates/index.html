@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eye Blink Detection System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="title">
+                    <span class="icon">👁️</span>
+                    Eye Blink Detection System
+                </h1>
+                <p class="subtitle">Real-time blink tracking with AI-powered detection</p>
+            </div>
+            <div class="status-indicator" id="statusIndicator">
+                <span class="status-dot"></span>
+                <span class="status-text">Ready</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Video Panel -->
+            <div class="video-panel">
+                <div class="panel-header">
+                    <h2>Live Video Feed</h2>
+                    <div class="recording-badge" id="recordingBadge" style="display: none;">
+                        <span class="rec-dot"></span>
+                        DETECTING
+                    </div>
+                </div>
+                <div class="video-container">
+                    <img id="videoFeed" src="" alt="Video Feed" />
+                    <div class="video-overlay" id="videoOverlay">
+                        <div class="play-button" id="playButton">
+                            <svg width="80" height="80" viewBox="0 0 80 80">
+                                <circle cx="40" cy="40" r="35" fill="rgba(0, 255, 100, 0.2)" stroke="rgba(0, 255, 100, 0.8)" stroke-width="2"/>
+                                <polygon points="32,25 32,55 55,40" fill="rgba(0, 255, 100, 0.9)"/>
+                            </svg>
+                            <p>Click Start to Begin</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics Panel -->
+            <div class="stats-panel">
+                <div class="panel-header">
+                    <h2>Statistics</h2>
+                    <button class="btn-icon" id="refreshBtn" title="Refresh">
+                        <span>🔄</span>
+                    </button>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card primary">
+                        <div class="stat-icon">👁️</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="totalBlinks">0</div>
+                            <div class="stat-label">Total Blinks</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon">📊</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="earValue">0.000</div>
+                            <div class="stat-label">Eye Aspect Ratio</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon">⚡</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="blinkRate">0.0</div>
+                            <div class="stat-label">Blink Rate (BPM)</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon">📈</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="avgBlinkRate">0.0</div>
+                            <div class="stat-label">Average Rate</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon">⏱️</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="sessionTime">0s</div>
+                            <div class="stat-label">Session Duration</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card status" id="statusCard">
+                        <div class="stat-icon">🔍</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="statusValue">Ready</div>
+                            <div class="stat-label">Current Status</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Drowsiness Alert -->
+                <div class="alert-box" id="drowsinessAlert" style="display: none;">
+                    <div class="alert-icon">⚠️</div>
+                    <div class="alert-content">
+                        <h3>Drowsiness Detected!</h3>
+                        <p>Please take a break and rest your eyes</p>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="controls-section">
+                    <h3>Controls</h3>
+                    <div class="button-group">
+                        <button class="btn btn-success" id="startBtn">
+                            <span class="btn-icon">▶</span>
+                            Start Detection
+                        </button>
+                        <button class="btn btn-warning" id="stopBtn" disabled>
+                            <span class="btn-icon">⏸</span>
+                            Stop
+                        </button>
+                        <button class="btn btn-primary" id="resetBtn">
+                            <span class="btn-icon">🔄</span>
+                            Reset
+                        </button>
+                        <button class="btn btn-info" id="exportBtn">
+                            <span class="btn-icon">💾</span>
+                            Export Data
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="settings-section">
+                    <h3>Settings</h3>
+                    <div class="setting-item">
+                        <label for="earThreshold">
+                            EAR Threshold
+                            <span class="setting-value" id="earThresholdValue">0.25</span>
+                        </label>
+                        <input type="range" id="earThreshold" min="0.15" max="0.35" step="0.01" value="0.25">
+                    </div>
+                    <div class="setting-item">
+                        <label for="consecFrames">
+                            Consecutive Frames
+                            <span class="setting-value" id="consecFramesValue">3</span>
+                        </label>
+                        <input type="range" id="consecFrames" min="1" max="10" step="1" value="3">
+                    </div>
+                    <div class="setting-item">
+                        <label for="drowsinessThreshold">
+                            Drowsiness Time (s)
+                            <span class="setting-value" id="drowsinessThresholdValue">1.5</span>
+                        </label>
+                        <input type="range" id="drowsinessThreshold" min="0.5" max="5.0" step="0.1" value="1.5">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Eye Blink Detection System v2.0 | Built with ❤️ using OpenCV & Flask</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

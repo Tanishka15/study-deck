@@ -1,0 +1,32 @@
+{
+  "detection": {
+    "ear_threshold": 0.25,
+    "consecutive_frames": 3,
+    "drowsiness_threshold_seconds": 1.5
+  },
+  "camera": {
+    "device_index": 0,
+    "width": 640,
+    "height": 480,
+    "fps": 30
+  },
+  "display": {
+    "show_eye_contours": true,
+    "show_statistics": true,
+    "theme": "dark"
+  },
+  "alerts": {
+    "drowsiness_enabled": true,
+    "sound_enabled": true,
+    "visual_enabled": true
+  },
+  "export": {
+    "auto_export_on_exit": false,
+    "export_format": "csv",
+    "include_summary": true
+  },
+  "advanced": {
+    "face_detector_upsampling": 0,
+    "min_detection_confidence": 0.5
+  }
+}

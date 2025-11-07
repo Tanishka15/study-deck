@@ -1,0 +1,27 @@
+# Eye Blink Detection System Requirements
+
+# Computer Vision
+opencv-python>=4.8.0
+dlib>=19.24.0
+
+# Image Processing
+numpy>=1.24.0
+scipy>=1.10.0
+Pillow>=10.0.0
+
+# Web Interface
+flask>=3.0.0
+
+# Note: dlib may require additional dependencies on some systems
+# For macOS with Apple Silicon: 
+#   brew install cmake
+#   pip install dlib
+#
+# For Linux (Ubuntu/Debian):
+#   sudo apt-get install cmake
+#   sudo apt-get install python3-dev
+#   pip install dlib
+#
+# For Windows:
+#   Download pre-built wheel from https://github.com/z-mahmud22/Dlib_Windows_Python3.x
+#   Or use conda: conda install -c conda-forge dlib
