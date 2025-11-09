@@ -55,20 +55,23 @@ export function useBlinks(videoElement) {
 
         const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
         const detectorConfig = {
-          runtime: 'mediapipe',
-          solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
-          refineLandmarks: true,
+          runtime: 'tfjs',
+          refineLandmarks: false,
           maxFaces: 1
         };
 
         const faceDetector = await faceLandmarksDetection.createDetector(model, detectorConfig);
         
         if (mounted) {
+          console.log('Blink detector initialized successfully');
           setDetector(faceDetector);
           setIsReady(true);
         }
       } catch (error) {
         console.error('Error initializing face detector for blinks:', error);
+        if (mounted) {
+          setIsReady(false);
+        }
       }
     }
 

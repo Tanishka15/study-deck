@@ -9,6 +9,11 @@ export default defineConfig({
     open: true
   },
   optimizeDeps: {
-    exclude: ['pdfjs-dist']
+    include: ['pdfjs-dist']
+  },
+  build: {
+    commonjsOptions: {
+      include: [/pdfjs-dist/, /node_modules/]
+    }
   }
 })

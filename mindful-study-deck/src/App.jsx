@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PDFUpload from './components/PDFUpload';
 import Flashcard from './components/Flashcard';
 import WebcamStream from './components/WebcamStream';
@@ -6,9 +6,9 @@ import GestureDetector from './components/GestureDetector';
 import EmotionDetector from './components/EmotionDetector';
 import BlinkDetector from './components/BlinkDetector';
 import DrawingCanvas from './components/DrawingCanvas';
-import BreakModal, { BreakTimerModal } from './components/BreakModal';
+import BreakModal from './components/BreakModal';
 import Dashboard from './components/Dashboard';
-import { updateCardMetrics, getNextCard } from './utils/spacedRepetition';
+import { updateCardMetrics } from './utils/spacedRepetition';
 import { useWebcam } from './hooks/useWebcam';
 import { useGestures } from './hooks/useGestures';
 
@@ -19,14 +19,14 @@ function App() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [currentEmotion, setCurrentEmotion] = useState('neutral');
   const [isFrustrated, setIsFrustrated] = useState(false);
-  const [blinkRate, setBlinkRate] = useState(17);
   const [showBreakModal, setShowBreakModal] = useState(false);
-  const [showBreakTimer, setShowBreakTimer] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [sessionStats, setSessionStats] = useState({
     gesturesUsed: 0,
     breaksTaken: 0,
     frustrationEvents: 0,
+    cardsReviewed: 0,
+    correctAnswers: 0,
     startTime: Date.now()
   });
 
@@ -36,12 +36,76 @@ function App() {
   const videoElement = videoRef.current;
 
   // Handle flashcards generated from PDF
-  const handleFlashcardsGenerated = (cards) => {
+  const handleFlashcardsGenerated = useCallback((cards) => {
+    console.log('Flashcards generated:', cards.length);
     setFlashcards(cards);
     setCurrentCardIndex(0);
     setIsFlipped(false);
-    setShowDashboard(false);
-  };
+  }, []);
+
+  // Navigation functions
+  const nextCard = useCallback(() => {
+    if (flashcards.length === 0) return;
+    
+    const nextIndex = (currentCardIndex + 1) % flashcards.length;
+    setCurrentCardIndex(nextIndex);
+    setIsFlipped(false);
+    setSessionStats(prev => ({ ...prev, cardsReviewed: prev.cardsReviewed + 1 }));
+  }, [flashcards.length, currentCardIndex]);
+
+  const previousCard = useCallback(() => {
+    if (flashcards.length === 0) return;
+    
+    const prevIndex = currentCardIndex === 0 ? flashcards.length - 1 : currentCardIndex - 1;
+    setCurrentCardIndex(prevIndex);
+    setIsFlipped(false);
+  }, [flashcards.length, currentCardIndex]);
+
+  const flipCard = useCallback(() => {
+    setIsFlipped(prev => !prev);
+  }, []);
+
+  // Mark card as understood
+  const markUnderstood = useCallback(() => {
+    if (flashcards.length === 0 || currentCardIndex >= flashcards.length) return;
+    
+    const currentCard = flashcards[currentCardIndex];
+    const updatedCard = updateCardMetrics(currentCard, 5); // Perfect recall
+    const updatedCards = [...flashcards];
+    updatedCards[currentCardIndex] = updatedCard;
+    setFlashcards(updatedCards);
+    
+    setSessionStats(prev => ({ 
+      ...prev, 
+      correctAnswers: prev.correctAnswers + 1,
+      gesturesUsed: prev.gesturesUsed + 1
+    }));
+    
+    // Move to next card
+    setTimeout(nextCard, 300);
+  }, [flashcards, currentCardIndex, nextCard]);
+
+  // Mark card for review
+  const markForReview = useCallback(() => {
+    if (flashcards.length === 0 || currentCardIndex >= flashcards.length) return;
+    
+    const currentCard = flashcards[currentCardIndex];
+    const updatedCard = updateCardMetrics(currentCard, 0); // Failed recall
+    const updatedCards = [...flashcards];
+    updatedCards[currentCardIndex] = updatedCard;
+    setFlashcards(updatedCards);
+    
+    setSessionStats(prev => ({ 
+      ...prev,
+      gesturesUsed: prev.gesturesUsed + 1
+    }));
+    
+    // Move to next card
+    setTimeout(nextCard, 300);
+  }, [flashcards, currentCardIndex, nextCard]);
+
+  // Current card for display
+  const currentCard = flashcards[currentCardIndex];
 
   // Handle gesture-based navigation
   useEffect(() => {
@@ -52,24 +116,24 @@ function App() {
     switch (currentGesture.type) {
       case 'swipe':
         if (currentGesture.direction === 'right') {
-          handleNextCard();
+          nextCard();
         } else if (currentGesture.direction === 'left') {
-          handlePrevCard();
+          previousCard();
         }
         break;
       
       case 'thumbs_up':
-        handleMarkAsUnderstood();
+        markUnderstood();
         break;
       
       case 'thumbs_down':
-        handleMarkAsNeedsReview();
+        markForReview();
         break;
       
       default:
         break;
     }
-  }, [currentGesture]);
+  }, [currentGesture, nextCard, previousCard, markUnderstood, markForReview]);
 
   // Handle emotion changes
   const handleEmotionChange = (emotion, frustrated) => {
@@ -85,84 +149,6 @@ function App() {
     setShowBreakModal(true);
   };
 
-  // Navigation functions
-  const handleNextCard = () => {
-    if (flashcards.length === 0) return;
-    
-    // Use adaptive learning to select next card
-    const nextIndex = getNextCard(flashcards, currentEmotion, blinkRate, currentCardIndex);
-    
-    if (nextIndex >= 0) {
-      setCurrentCardIndex(nextIndex);
-      setIsFlipped(false);
-    }
-  };
-
-  const handlePrevCard = () => {
-    if (flashcards.length === 0) return;
-    setCurrentCardIndex(prev => (prev - 1 + flashcards.length) % flashcards.length);
-    setIsFlipped(false);
-  };
-
-  const handleFlipCard = () => {
-    setIsFlipped(prev => !prev);
-  };
-
-  // Card marking functions
-  const handleMarkAsUnderstood = () => {
-    if (flashcards.length === 0) return;
-    
-    const updatedCards = [...flashcards];
-    updatedCards[currentCardIndex] = {
-      ...updatedCards[currentCardIndex],
-      markedAsUnderstood: true,
-      markedAsNeedsReview: false
-    };
-    
-    // Update with quality = 5 (perfect recall)
-    updatedCards[currentCardIndex] = updateCardMetrics(updatedCards[currentCardIndex], 5);
-    
-    setFlashcards(updatedCards);
-    
-    // Move to next card after a brief delay
-    setTimeout(handleNextCard, 500);
-  };
-
-  const handleMarkAsNeedsReview = () => {
-    if (flashcards.length === 0) return;
-    
-    const updatedCards = [...flashcards];
-    updatedCards[currentCardIndex] = {
-      ...updatedCards[currentCardIndex],
-      markedAsNeedsReview: true,
-      markedAsUnderstood: false
-    };
-    
-    // Update with quality = 2 (incorrect with effort)
-    updatedCards[currentCardIndex] = updateCardMetrics(updatedCards[currentCardIndex], 2);
-    
-    setFlashcards(updatedCards);
-  };
-
-  // Drawing functions
-  const handleSaveDrawing = (imageData) => {
-    if (flashcards.length === 0) return;
-    
-    const updatedCards = [...flashcards];
-    updatedCards[currentCardIndex] = {
-      ...updatedCards[currentCardIndex],
-      drawing: imageData
-    };
-    setFlashcards(updatedCards);
-  };
-
-  // Break functions
-  const handleStartBreak = () => {
-    setShowBreakModal(false);
-    setShowBreakTimer(true);
-    setSessionStats(prev => ({ ...prev, breaksTaken: prev.breaksTaken + 1 }));
-  };
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -171,21 +157,21 @@ function App() {
       switch (e.key) {
         case 'ArrowRight':
         case 'n':
-          handleNextCard();
+          nextCard();
           break;
         case 'ArrowLeft':
         case 'p':
-          handlePrevCard();
+          previousCard();
           break;
         case ' ':
           e.preventDefault();
-          handleFlipCard();
+          flipCard();
           break;
         case 'u':
-          handleMarkAsUnderstood();
+          markUnderstood();
           break;
         case 'r':
-          handleMarkAsNeedsReview();
+          markForReview();
           break;
         case 'd':
           setShowDashboard(prev => !prev);
@@ -197,7 +183,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [flashcards, currentCardIndex]);
+  }, [flashcards.length, nextCard, previousCard, flipCard, markUnderstood, markForReview]);
 
   // Calculate session duration
   useEffect(() => {
@@ -254,7 +240,7 @@ function App() {
               <Flashcard
                 card={flashcards[currentCardIndex]}
                 isFlipped={isFlipped}
-                onFlip={handleFlipCard}
+                onFlip={flipCard}
                 emotion={currentEmotion}
                 isFrustrated={isFrustrated}
               />
@@ -267,7 +253,6 @@ function App() {
                     gesture={currentGesture}
                     width={800}
                     height={600}
-                    onSaveDrawing={handleSaveDrawing}
                   />
                 </div>
               )}
@@ -276,28 +261,28 @@ function App() {
             {/* Navigation Controls */}
             <div className="flex items-center justify-center gap-4 mt-6">
               <button
-                onClick={handlePrevCard}
+                onClick={previousCard}
                 className="bg-white hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-lg font-medium shadow-md transition-all hover:scale-105"
               >
                 ← Previous
               </button>
               
               <button
-                onClick={handleMarkAsNeedsReview}
+                onClick={markForReview}
                 className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-medium shadow-md transition-all hover:scale-105"
               >
                 👎 Needs Review
               </button>
               
               <button
-                onClick={handleMarkAsUnderstood}
+                onClick={markUnderstood}
                 className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium shadow-md transition-all hover:scale-105"
               >
                 👍 Understood
               </button>
               
               <button
-                onClick={handleNextCard}
+                onClick={nextCard}
                 className="bg-white hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-lg font-medium shadow-md transition-all hover:scale-105"
               >
                 Next →
@@ -314,38 +299,48 @@ function App() {
         )}
       </main>
 
-      {/* Webcam and ML Components */}
-      {flashcards.length > 0 && (
-        <>
-          <WebcamStream />
-          <GestureDetector
-            videoElement={videoElement}
-            onGesture={() => {}} // Handled via hook directly
-            enabled={true}
-          />
+      {/* Webcam and ML Components - Always visible on right side */}
+      <>
+        <WebcamStream />
+        
+        {/* Emotion Detector - Top right */}
+        <div className="fixed top-20 right-4 z-50">
           <EmotionDetector
             videoElement={videoElement}
             onEmotionChange={handleEmotionChange}
             enabled={true}
           />
+        </div>
+
+        {/* Blink Detector - Below Emotion Detector */}
+        <div className="fixed top-64 right-4 z-50">
           <BlinkDetector
             videoElement={videoElement}
             onFatigueDetected={handleFatigueDetected}
             enabled={true}
           />
-        </>
-      )}
+        </div>
+
+        {/* Gesture Detector - Above webcam (only show when cards exist) */}
+        {flashcards.length > 0 && (
+          <div className="fixed bottom-44 right-4 w-48 z-50">
+            <GestureDetector
+              videoElement={videoElement}
+              onGesture={() => {}} // Handled via hook directly
+              enabled={true}
+            />
+          </div>
+        )}
+      </>
 
       {/* Modals */}
       <BreakModal
         isOpen={showBreakModal}
         onClose={() => setShowBreakModal(false)}
-        onStartBreak={handleStartBreak}
-      />
-      <BreakTimerModal
-        isOpen={showBreakTimer}
-        onClose={() => setShowBreakTimer(false)}
-        duration={300} // 5 minutes
+        onStartBreak={() => {
+          setShowBreakModal(false);
+          setSessionStats(prev => ({ ...prev, breaksTaken: prev.breaksTaken + 1 }));
+        }}
       />
     </div>
   );

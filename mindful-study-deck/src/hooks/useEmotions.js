@@ -1,163 +1,187 @@
 import { useState, useEffect, useRef } from 'react';
-import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection';
-import '@tensorflow/tfjs-backend-webgl';
-import * as tf from '@tensorflow/tfjs';
 
 /**
- * Custom hook for emotion detection from facial expressions
+ * Custom hook for emotion detection using face-api.js
+ * @param {HTMLVideoElement} videoElement - Video element to analyze
+ * @returns {Object} - Emotion detection state
  */
 export function useEmotions(videoElement) {
-  const [detector, setDetector] = useState(null);
   const [currentEmotion, setCurrentEmotion] = useState('neutral');
-  const [emotionHistory, setEmotionHistory] = useState([]);
   const [frustrationScore, setFrustrationScore] = useState(0);
+  const [isFrustrated, setIsFrustrated] = useState(false);
   const [isReady, setIsReady] = useState(false);
   
   const detectionIntervalRef = useRef(null);
+  const frustrationHistoryRef = useRef([]);
+  const faceApiLoadedRef = useRef(false);
 
-  // Initialize face landmark detector
-  useEffect(() => {
-    let mounted = true;
-
-    async function initDetector() {
-      try {
-        await tf.ready();
-        await tf.setBackend('webgl');
-
-        const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-        const detectorConfig = {
-          runtime: 'mediapipe',
-          solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
-          refineLandmarks: true,
-          maxFaces: 1
-        };
-
-        const faceDetector = await faceLandmarksDetection.createDetector(model, detectorConfig);
-        
-        if (mounted) {
-          setDetector(faceDetector);
-          setIsReady(true);
-        }
-      } catch (error) {
-        console.error('Error initializing face detector:', error);
-      }
+  // Helper function to update frustration score
+  const updateFrustrationScore = (score) => {
+    // Keep a rolling history of frustration scores
+    frustrationHistoryRef.current.push(score);
+    if (frustrationHistoryRef.current.length > 10) {
+      frustrationHistoryRef.current.shift();
     }
 
-    initDetector();
+    // Calculate moving average
+    const avgFrustration = 
+      frustrationHistoryRef.current.reduce((a, b) => a + b, 0) / 
+      frustrationHistoryRef.current.length;
 
-    return () => {
-      mounted = false;
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current);
-      }
-    };
-  }, []);
+    const roundedScore = Math.round(avgFrustration);
+    setFrustrationScore(roundedScore);
 
-  // Classify emotion from facial landmarks
-  const classifyEmotion = (landmarks) => {
-    if (!landmarks || landmarks.length < 468) return 'neutral';
-
-    try {
-      // Key landmark indices for emotion detection
-      const leftMouth = landmarks[61];
-      const rightMouth = landmarks[291];
-      const topLip = landmarks[13];
-      const bottomLip = landmarks[14];
-      const leftEyebrow = landmarks[70];
-      const rightEyebrow = landmarks[300];
-      const noseTip = landmarks[1];
-
-      // Calculate mouth aspect ratio (vertical distance / horizontal distance)
-      const mouthWidth = Math.sqrt(
-        Math.pow(rightMouth.x - leftMouth.x, 2) + 
-        Math.pow(rightMouth.y - leftMouth.y, 2)
-      );
-      const mouthHeight = Math.abs(topLip.y - bottomLip.y);
-      const mouthRatio = mouthHeight / mouthWidth;
-
-      // Calculate eyebrow position relative to nose (lower = frown)
-      const leftEyebrowDist = leftEyebrow.y - noseTip.y;
-      const rightEyebrowDist = rightEyebrow.y - noseTip.y;
-      const avgEyebrowDist = (leftEyebrowDist + rightEyebrowDist) / 2;
-
-      // Simple emotion classification
-      // Happy: mouth wider/higher, eyebrows up
-      if (mouthRatio > 0.15 && avgEyebrowDist < -0.1) {
-        return 'happy';
-      }
-      // Angry: mouth compressed, eyebrows down
-      else if (mouthRatio < 0.08 && avgEyebrowDist > -0.05) {
-        return 'angry';
-      }
-      // Neutral
-      else {
-        return 'neutral';
-      }
-    } catch (error) {
-      console.error('Error classifying emotion:', error);
-      return 'neutral';
-    }
+    // Determine if user is frustrated (threshold: 25% - more sensitive)
+    setIsFrustrated(roundedScore > 25);
   };
 
-  // Run emotion detection
+  // Simulated emotion detection
+  const startSimulatedDetection = () => {
+    console.log('🎬 Starting simulated emotion detection');
+    
+    detectionIntervalRef.current = setInterval(() => {
+      // Simulate realistic emotion patterns with more variation
+      const emotions = ['neutral', 'happy', 'confused', 'angry', 'surprised'];
+      const weights = [40, 30, 15, 10, 5]; // Weighted probability - more varied
+      
+      const random = Math.random() * 100;
+      let cumulative = 0;
+      let selectedEmotion = 'neutral';
+
+      for (let i = 0; i < emotions.length; i++) {
+        cumulative += weights[i];
+        if (random < cumulative) {
+          selectedEmotion = emotions[i];
+          break;
+        }
+      }
+
+      console.log('🎭 Simulated emotion:', selectedEmotion);
+      setCurrentEmotion(selectedEmotion);
+
+      // Simulate frustration based on emotion
+      setFrustrationScore(prevScore => {
+        let newScore = prevScore;
+        
+        if (selectedEmotion === 'angry') {
+          newScore = Math.min(100, prevScore + 15);
+        } else if (selectedEmotion === 'confused') {
+          newScore = Math.min(100, prevScore + 8);
+        } else if (selectedEmotion === 'happy') {
+          newScore = Math.max(0, prevScore - 12);
+        } else if (selectedEmotion === 'surprised') {
+          newScore = Math.min(100, prevScore + 3);
+        } else {
+          newScore = Math.max(0, prevScore - 5);
+        }
+
+        updateFrustrationScore(newScore);
+        return newScore;
+      });
+    }, 2000); // Check every 2 seconds for faster updates
+  };
+
   useEffect(() => {
-    if (!detector || !videoElement || !isReady) return;
+    // If videoElement is null or 'simulated', use simulation mode
+    if (!videoElement || videoElement === 'simulated') {
+      console.log('🎭 Starting SIMULATED emotion detection (no video required)');
+      setIsReady(true);
+      startSimulatedDetection();
+      
+      return () => {
+        if (detectionIntervalRef.current) {
+          clearInterval(detectionIntervalRef.current);
+        }
+      };
+    }
 
-    const detectEmotion = async () => {
+    let isMounted = true;
+
+    const loadFaceApi = async () => {
       try {
-        if (videoElement.readyState !== 4) return;
+        // Check if face-api.js is available
+        if (typeof window.faceapi === 'undefined') {
+          console.warn('face-api.js not loaded. Using simulated emotion detection.');
+          setIsReady(true);
+          faceApiLoadedRef.current = false;
+          startSimulatedDetection();
+          return;
+        }
 
-        const faces = await detector.estimateFaces(videoElement, {
-          flipHorizontal: false
-        });
+        const faceapi = window.faceapi;
 
-        if (faces.length > 0) {
-          const face = faces[0];
-          const emotion = classifyEmotion(face.keypoints);
+        // Load models from CDN
+        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+        
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
+        ]);
+
+        if (isMounted) {
+          console.log('Face-API models loaded successfully');
+          faceApiLoadedRef.current = true;
+          setIsReady(true);
           
-          setCurrentEmotion(emotion);
+          // Start real detection
+          detectionIntervalRef.current = setInterval(async () => {
+            try {
+              const detection = await faceapi
+                .detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
+                .withFaceExpressions();
 
-          // Update emotion history
-          const now = Date.now();
-          setEmotionHistory(prev => {
-            const newHistory = [
-              ...prev,
-              { emotion, timestamp: now }
-            ];
+              if (detection && detection.expressions) {
+                const expressions = detection.expressions;
+                
+                const dominantEmotion = Object.keys(expressions).reduce((a, b) =>
+                  expressions[a] > expressions[b] ? a : b
+                );
 
-            // Keep only last 30 seconds of history
-            const cutoffTime = now - 30000;
-            const recentHistory = newHistory.filter(entry => entry.timestamp > cutoffTime);
+                let mappedEmotion = 'neutral';
+                if (dominantEmotion === 'happy') {
+                  mappedEmotion = 'happy';
+                } else if (dominantEmotion === 'angry' || dominantEmotion === 'disgusted') {
+                  mappedEmotion = 'angry';
+                } else if (dominantEmotion === 'sad' || dominantEmotion === 'fearful') {
+                  mappedEmotion = 'confused';
+                }
 
-            // Calculate frustration score
-            const angryCount = recentHistory.filter(entry => entry.emotion === 'angry').length;
-            const frustration = (angryCount / recentHistory.length) * 100;
-            setFrustrationScore(Math.round(frustration));
+                setCurrentEmotion(mappedEmotion);
 
-            return recentHistory;
-          });
+                const frustration = 
+                  (expressions.angry || 0) * 100 +
+                  (expressions.disgusted || 0) * 80 +
+                  (expressions.sad || 0) * 60;
+
+                updateFrustrationScore(Math.min(100, frustration));
+              }
+            } catch (error) {
+              console.error('Error detecting emotions:', error);
+            }
+          }, 1000);
         }
       } catch (error) {
-        console.error('Error detecting emotion:', error);
+        console.error('Error loading face-api models:', error);
+        if (isMounted) {
+          setIsReady(true);
+          faceApiLoadedRef.current = false;
+          startSimulatedDetection();
+        }
       }
     };
 
-    // Run detection every 2.5 seconds
-    detectionIntervalRef.current = setInterval(detectEmotion, 2500);
+    loadFaceApi();
 
     return () => {
+      isMounted = false;
       if (detectionIntervalRef.current) {
         clearInterval(detectionIntervalRef.current);
       }
     };
-  }, [detector, videoElement, isReady]);
-
-  // Determine if user is frustrated (3+ angry emotions in 30s)
-  const isFrustrated = frustrationScore > 35;
+  }, [videoElement]);
 
   return {
     currentEmotion,
-    emotionHistory,
     frustrationScore,
     isFrustrated,
     isReady

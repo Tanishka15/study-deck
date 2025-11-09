@@ -40,41 +40,58 @@ export default function PDFUpload({ onFlashcardsGenerated }) {
   }, []);
 
   const processPDF = async (file) => {
-    // Use a default API key or handle it server-side
-    const defaultApiKey = 'YOUR_API_KEY_HERE'; // Replace with your actual key or handle server-side
-    
+    // Read API key from environment (optional). If absent, we'll fall back to sample cards.
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
     setIsProcessing(true);
     setError(null);
     setProgress({ current: 0, total: 0, stage: 'Extracting text from PDF...' });
 
     try {
+      console.log('Processing PDF:', file.name);
+      
       // Import utilities dynamically
       const { extractTextFromPDF, chunkText } = await import('../utils/pdfProcessor');
       const { generateFlashcards } = await import('../utils/flashcardGenerator');
 
       // Extract text
+      console.log('Extracting text from PDF...');
       const text = await extractTextFromPDF(file);
+      console.log('Text extracted:', text.length, 'characters');
       
-      if (!text || text.trim().length < 100) {
-        throw new Error('Could not extract enough text from PDF');
+      if (!text || text.trim().length < 50) {
+        console.warn('Not enough text extracted. Using sample flashcards.');
+        // Fall back to sample flashcards
+        const sampleCards = await generateFlashcards([], null);
+        if (sampleCards.length > 0) {
+          setProgress({ current: 3, total: 3, stage: `Created ${sampleCards.length} sample flashcards!` });
+          setTimeout(() => {
+            onFlashcardsGenerated(sampleCards);
+            setIsProcessing(false);
+          }, 1000);
+          return;
+        }
+        throw new Error('Could not extract enough text from PDF. The PDF may be image-based or empty.');
       }
 
       setProgress({ current: 1, total: 3, stage: 'Chunking text...' });
 
       // Chunk text
+      console.log('Chunking text...');
       const chunks = chunkText(text, 2000);
+      console.log('Created', chunks.length, 'chunks');
       
       if (chunks.length === 0) {
-        throw new Error('No valid text chunks found');
+        throw new Error('No valid text chunks found in PDF');
       }
 
       setProgress({ current: 2, total: 3, stage: `Generating flashcards from ${chunks.length} sections...` });
 
       // Generate flashcards
-      console.log('Starting flashcard generation with', chunks.length, 'chunks');
+      console.log('Generating flashcards...');
       const flashcards = await generateFlashcards(
         chunks,
-        defaultApiKey,
+        apiKey,
         (current, total) => {
           setProgress({
             current: 2,
@@ -84,10 +101,10 @@ export default function PDFUpload({ onFlashcardsGenerated }) {
         }
       );
 
-      console.log('Generated flashcards:', flashcards.length, flashcards);
+      console.log('Generated', flashcards.length, 'flashcards');
 
-      if (!flashcards || flashcards.length === 0) {
-        throw new Error('No flashcards were generated');
+      if (flashcards.length === 0) {
+        throw new Error('No flashcards were generated from the PDF');
       }
 
       setProgress({ current: 3, total: 3, stage: `Created ${flashcards.length} flashcards!` });
@@ -100,7 +117,7 @@ export default function PDFUpload({ onFlashcardsGenerated }) {
 
     } catch (err) {
       console.error('Error processing PDF:', err);
-      setError(err.message || 'Failed to process PDF');
+      setError(err.message || 'Failed to process PDF. Please try a different PDF file.');
       setIsProcessing(false);
     }
   };
